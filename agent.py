@@ -15,10 +15,10 @@ class ExampleAgent(BaseAgent):
         self.current_velocity = Point(0, 0)  # Velocidade atual do robô
 
     def decision(self):
-        if len(self.targets) == 0:
+        if not self.targets:
             return
-
         self.target = self.choose_target()
+
         if self.target is None:
             return
 
@@ -91,17 +91,35 @@ class ExampleAgent(BaseAgent):
             new_velocity = Point(max(self.current_velocity.x + deceleration_vector.x, 0), max(self.current_velocity.y + deceleration_vector.y, 0) )
             self.current_velocity = new_velocity
 
-    def choose_target(self):
-        closest_target = None
-        min_distance = float('inf')
-        for target in self.targets:
-            distance = self.pos.dist_to(target)
-            if not self.is_target_blocked_with_opponent(target):
-                if distance < min_distance:
-                    min_distance = distance
-                    closest_target = target
-        return closest_target
+    def distribute_targets_at_teammates(self):
+        if not self.targets:
+            return {}
+        available_targets = self.targets.copy()
+        all_robots = list(self.teammates.values()) + [self.robot]
+        allocation = {robot.id: None for robot in all_robots}
+        # Iterar para alocar os alvos mais próximos
+        while available_targets:
+            for robot in all_robots:
+                if robot.id in allocation and allocation[robot.id] is not None:
+                    continue
+                closest_target = None
+                min_distance = float('inf')
+                for target in available_targets:
+                    distance = Point(robot.x, robot.y).dist_to(target)
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_target = target
+                if closest_target:
+                    allocation[robot.id] = closest_target
+                    available_targets.remove(closest_target)
+        return allocation
 
+    def choose_target(self):
+        if not self.targets:
+            return None
+        target_allocation = self.distribute_targets_at_teammates()
+        return target_allocation.get(self.id, None)
+        
     def is_target_blocked(self):
         for opponent_id, opponent in self.opponents.items():
             if opponent.x == self.target.x and opponent.y == self.target.y:
